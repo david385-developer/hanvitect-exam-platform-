@@ -18,9 +18,12 @@ export function ExamPage({ showToast }) {
   const [showCameraBlock, setShowCameraBlock] = useState(false);
 
   const [examStarted, setExamStarted] = useState(false);
-  const [isCameraReady, setIsCameraReady] = useState(false);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [isCameraInitializing, setIsCameraInitializing] = useState(false);
+  const [antiCheatActive, setAntiCheatActive] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [warnings, setWarnings] = useState(0);
+  const [isAlertActive, setIsAlertActive] = useState(false);
   const lastViolationRef = useRef(0);
   const VIOLATION_COOLDOWN = 2000;
 
@@ -91,14 +94,19 @@ export function ExamPage({ showToast }) {
 
   const startCamera = async () => {
     try {
+      setIsCameraInitializing(true);
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       if (videoRef.current) videoRef.current.srcObject = stream;
-      setIsCameraReady(true);
+      setCameraReady(true);
       setCameraGranted(true);
+      setTimeout(() => {
+        setIsCameraInitializing(false);
+      }, 2000);
       return true;
     } catch {
-      showToast('Camera required!');
-      setIsCameraReady(false);
+      setIsCameraInitializing(false);
+      showToast('Camera permission is required to proceed.');
+      setCameraReady(false);
       setShowCameraBlock(true);
       return false;
     }
@@ -117,7 +125,11 @@ export function ExamPage({ showToast }) {
   };
 
   const handleViolation = (type) => {
-    if (!examStarted || !isCameraReady || !isFullscreen) return;
+    if (!antiCheatActive) return;
+    if (isAlertActive) return;
+
+    setIsAlertActive(true);
+    setTimeout(() => setIsAlertActive(false), 1500);
 
     const now = Date.now();
     if (now - lastViolationRef.current < VIOLATION_COOLDOWN) return;
@@ -126,16 +138,16 @@ export function ExamPage({ showToast }) {
 
     setWarnings((prev) => {
       const count = prev + 1;
-      showToast(`Violation: ${type} (${count}/3)`);
+      if (count >= 3) {
+        showToast('Too many violations. Auto submitting...');
+        handleAutoSubmit();
+      } else {
+        showToast(`Warning ${count}/3: Do not leave the exam window.`);
+      }
 
       // backend integration
       examService.logCheating(examSessionId, type).catch(console.error);
       if (hookViolation) hookViolation(type);
-
-      if (count >= 3) {
-        showToast('Too many violations. Auto submitting...');
-        handleAutoSubmit();
-      }
 
       return count;
     });
@@ -145,30 +157,53 @@ export function ExamPage({ showToast }) {
     if (questions.length === 0 || submitted) return;
 
     let mounted = true;
-    const prepareExam = async () => {
-      const fullscreen = await enterFullscreen();
-      if (!fullscreen) {
-        navigate('/start-exam', { replace: true });
-        return;
-      }
-
+    const setupCamera = async () => {
       const camera = await startCamera();
       if (!camera) {
         navigate('/exam-form', { replace: true });
         return;
       }
-
-      if (mounted) setExamStarted(true);
     };
 
-    const timer = setTimeout(() => prepareExam(), 100);
+    const timer = setTimeout(() => setupCamera(), 100);
 
     return () => {
       mounted = false;
       clearTimeout(timer);
-      stopCamera();
+      if (!examStarted) stopCamera();
     };
-  }, [questions.length, submitted, navigate, stopCamera]);
+  }, [questions.length, submitted, navigate, stopCamera, examStarted]);
+
+  const generateMockQuestions = () => {
+    const sample = [
+      {
+        question: 'What is JavaScript?',
+        options: ['Language', 'Database', 'OS', 'Browser'],
+        answer: 0,
+      },
+      {
+        question: 'What is React?',
+        options: ['Library', 'Language', 'Server', 'OS'],
+        answer: 0,
+      },
+      {
+        question: 'What is Node.js?',
+        options: ['Runtime', 'Framework', 'DB', 'Compiler'],
+        answer: 0,
+      },
+    ];
+
+    return Array.from({ length: 30 }, (_, i) => ({
+      ...sample[i % sample.length],
+      _id: (i + 1).toString(),
+    }));
+  };
+
+  useEffect(() => {
+    if (!questions || questions.length === 0) {
+      setQuestions(generateMockQuestions());
+    }
+  }, [questions]);
 
   const handleSubmitClick = () => {
     if (submitted) return;
@@ -177,8 +212,20 @@ export function ExamPage({ showToast }) {
     submitAnswers(answersRef.current);
   };
 
+  const handleStartExam = async () => {
+    const fullscreen = await enterFullscreen();
+    if (!fullscreen) {
+      return;
+    }
+
+    setExamStarted(true);
+    setTimeout(() => {
+      setAntiCheatActive(true);
+    }, 1000);
+  };
+
   useEffect(() => {
-    if (submitted || questions.length === 0) return;
+    if (submitted || questions.length === 0 || !examStarted) return;
     const t = setInterval(() => {
       setTimeLeft((prev) => {
         if (prev <= 1) {
@@ -191,7 +238,7 @@ export function ExamPage({ showToast }) {
       });
     }, 1000);
     return () => clearInterval(t);
-  }, [submitted, questions.length, submitAnswers]);
+  }, [submitted, questions.length, submitAnswers, examStarted]);
 
   const blockBack = (e) => {
     e.preventDefault();
@@ -200,7 +247,7 @@ export function ExamPage({ showToast }) {
     return false;
   };
   useEffect(() => {
-    if (questions.length > 0 && !submitted) {
+    if (questions.length > 0 && !submitted && antiCheatActive) {
       window.history.pushState(null, '', window.location.href);
       window.addEventListener('popstate', blockBack);
       window.addEventListener('beforeunload', blockBack);
@@ -209,17 +256,28 @@ export function ExamPage({ showToast }) {
       window.removeEventListener('popstate', blockBack);
       window.removeEventListener('beforeunload', blockBack);
     };
-  }, [questions.length, submitted]);
+  }, [questions.length, submitted, antiCheatActive]);
 
   useEffect(() => {
-    const handlerTab = () => {
+    const handleVisibility = () => {
+      if (isCameraInitializing) return;
+      if (!antiCheatActive) return;
       if (document.hidden) handleViolation('tab-switch');
     };
-    const handlerBlur = () => handleViolation('blur');
+
+    const handleBlur = () => {
+      if (isCameraInitializing) return;
+      if (!antiCheatActive) return;
+      handleViolation('window-blur');
+    };
+
     const handlerFSExit = () => {
+      if (!antiCheatActive) return;
       if (!document.fullscreenElement) handleViolation('fullscreen-exit');
     };
+
     const handlerPrintScreen = (e) => {
+      if (!antiCheatActive) return;
       if (e.key === 'PrintScreen') {
         handleViolation('screenshot');
         document.body.style.filter = 'blur(10px)';
@@ -235,20 +293,22 @@ export function ExamPage({ showToast }) {
       }
     };
 
-    document.addEventListener('visibilitychange', handlerTab);
-    window.addEventListener('blur', handlerBlur);
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('blur', handleBlur);
     document.addEventListener('fullscreenchange', handlerFSExit);
     document.addEventListener('keydown', handlerPrintScreen);
 
     return () => {
-      document.removeEventListener('visibilitychange', handlerTab);
-      window.removeEventListener('blur', handlerBlur);
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('blur', handleBlur);
       document.removeEventListener('fullscreenchange', handlerFSExit);
       document.removeEventListener('keydown', handlerPrintScreen);
     };
-  }, [examStarted, isCameraReady, isFullscreen]);
+  }, [antiCheatActive, isCameraInitializing]);
 
   useEffect(() => {
+    if (!antiCheatActive) return;
+
     const interval = setInterval(() => {
       if (!videoRef.current?.srcObject) {
         handleViolation('camera-off');
@@ -256,7 +316,7 @@ export function ExamPage({ showToast }) {
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [examStarted, isCameraReady]);
+  }, [antiCheatActive]);
 
 
   const selectAnswer = (qId, option) => {
@@ -288,6 +348,24 @@ export function ExamPage({ showToast }) {
     return (
       <div className="exam-page">
         <div className="exam-loading">Loading exam...</div>
+      </div>
+    );
+  }
+
+  if (!examStarted) {
+    return (
+      <div className="exam-page exam-setup">
+        <div className="setup-card">
+          <h1>Exam Setup</h1>
+          <p>Camera access has been granted. Click "Start Exam" to begin.</p>
+          <div className={`camera-container ${cameraGranted ? 'visible' : ''}`}>
+            <span className="camera-label">Camera Setup</span>
+            <video ref={videoRef} autoPlay muted playsInline />
+          </div>
+          <button onClick={handleStartExam} className="btn-primary start-exam-btn">
+            Start Exam
+          </button>
+        </div>
       </div>
     );
   }
@@ -366,8 +444,9 @@ export function ExamPage({ showToast }) {
         </nav>
       </main>
 
-      <div className={`camera-preview ${cameraGranted ? 'visible' : ''}`}>
-        <video ref={videoRef} autoPlay muted playsInline className="camera-video" />
+      <div className={`camera-container ${cameraGranted && examStarted ? 'visible' : ''}`}>
+        <span className="camera-label">Camera Active</span>
+        <video ref={videoRef} autoPlay muted playsInline />
       </div>
     </div>
   );
