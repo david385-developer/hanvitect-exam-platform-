@@ -526,6 +526,21 @@ const getSessionStatus = async (req, res, next) => {
   }
 };
 
+// User: own results history
+const getSelfResults = async (req, res, next) => {
+  try {
+    const userId = req.user._id;
+    const results = await Result.find({ userId }).sort({ createdAt: -1 }).lean();
+
+    res.json({
+      success: true,
+      data: { results },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 // Admin: Create question
 const createQuestion = async (req, res, next) => {
   try {
@@ -564,5 +579,6 @@ module.exports = {
   submitExam,
   getResult,
   getSessionStatus,
+  getSelfResults,
   createQuestion,
 };

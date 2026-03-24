@@ -30,7 +30,7 @@ export function ExamFormPage({ showToast }) {
       const formData = { course, education, termsAccepted: !!termsAccepted };
       console.log('Sending Form Data:', formData);
       const { data } = await examService.submitForm(course, education, !!termsAccepted);
-      navigate('/otp-verify', {
+      navigate('/otp', {
         state: {
           examSessionId: data.examSessionId,
           email: data.email,

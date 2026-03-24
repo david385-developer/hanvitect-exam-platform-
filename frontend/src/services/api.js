@@ -29,23 +29,32 @@ api.interceptors.response.use(
 
 export const authService = {
   login: async (email, password) => {
-    console.log('[CLIENT][AUTH][LOGIN] sending:', { email });
-    const r = await api.post('/auth/login', { email, password });
-    console.log('[CLIENT][AUTH][LOGIN] response message:', r.data?.message);
+    console.log('[CLIENT][AUTH][user-login] sending:', { email });
+    const r = await api.post('/auth/user/login', { email, password });
+    console.log('[CLIENT][AUTH][user-login] response message:', r.data?.message);
     return r.data;
   },
-  register: async (name, email, password, role = 'user') => {
-    console.log('[CLIENT][AUTH][REGISTER] sending:', { name, email, role });
-    const r = await api.post('/auth/register', {
+  register: async (name, email, password) => {
+    console.log('[CLIENT][AUTH][user-register] sending:', { name, email });
+    const r = await api.post('/auth/user/register', {
       name,
       email,
       password,
-      role,
     });
-    console.log('[CLIENT][AUTH][REGISTER] response message:', r.data?.message);
+    console.log('[CLIENT][AUTH][user-register] response message:', r.data?.message);
     return r.data;
   },
   getMe: () => api.get('/auth/me').then((r) => r.data),
+};
+
+export const adminAuthService = {
+  login: async (email, password) => {
+    console.log('[CLIENT][AUTH][admin-login] sending:', { email });
+    const r = await api.post('/auth/admin/login', { email, password });
+    console.log('[CLIENT][AUTH][admin-login] response message:', r.data?.message);
+    return r.data;
+  },
+  getMe: () => api.get('/auth/admin/me').then((r) => r.data),
 };
 
 export const examService = {
@@ -67,6 +76,19 @@ export const examService = {
     api.get(`/exam/session/${examSessionId}/result`).then((r) => r.data),
   getStatus: (examSessionId) =>
     api.get(`/exam/session/${examSessionId}/status`).then((r) => r.data),
+};
+
+export const adminService = {
+  getAnalytics: () => api.get('/admin/analytics').then((r) => r.data),
+  getUsers: (params) => api.get('/admin/users', { params }).then((r) => r.data),
+  blockUser: (userId, isBlocked) => api.patch(`/admin/users/${userId}/block`, { isBlocked }).then((r) => r.data),
+  getQuestions: (params) => api.get('/admin/questions', { params }).then((r) => r.data),
+  createQuestion: (payload) => api.post('/admin/questions', payload).then((r) => r.data),
+  updateQuestion: (questionId, payload) => api.put(`/admin/questions/${questionId}`, payload).then((r) => r.data),
+  deleteQuestion: (questionId) => api.delete(`/admin/questions/${questionId}`).then((r) => r.data),
+  getResults: (params) => api.get('/admin/results', { params }).then((r) => r.data),
+  getViolations: () => api.get('/admin/violations').then((r) => r.data),
+  getConfig: () => api.get('/admin/config').then((r) => r.data),
 };
 
 export default api;
