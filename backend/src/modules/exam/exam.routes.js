@@ -31,6 +31,7 @@ router.post(
 router.post(
   '/form',
   authMiddleware,
+  roleMiddleware('user'),
   validate(examFormSchema),
   examController.submitExamForm
 );
@@ -38,6 +39,7 @@ router.post(
 router.post(
   '/request-otp',
   authMiddleware,
+  roleMiddleware('user'),
   validate(requestExamOTPSchema),
   examController.requestExamOTP
 );
@@ -45,6 +47,7 @@ router.post(
 router.post(
   '/start',
   authMiddleware,
+  roleMiddleware('user'),
   validate(startExamSchema),
   examController.startExam
 );
@@ -52,12 +55,14 @@ router.post(
 router.get(
   '/session/:examSessionId/questions',
   authMiddleware,
+  roleMiddleware('user'),
   examController.getQuestions
 );
 
 router.post(
   '/cheating',
   authMiddleware,
+  roleMiddleware('user'),
   validate(cheatingEventSchema),
   examController.logCheatingEvent
 );
@@ -65,6 +70,7 @@ router.post(
 router.post(
   '/submit',
   authMiddleware,
+  roleMiddleware('user'),
   validate(submitAnswersSchema),
   examController.submitExam
 );
@@ -72,12 +78,21 @@ router.post(
 router.get(
   '/session/:examSessionId/result',
   authMiddleware,
+  roleMiddleware('user'),
   examController.getResult
+);
+
+router.get(
+  '/result/self',
+  authMiddleware,
+  roleMiddleware('user'),
+  examController.getSelfResults
 );
 
 router.get(
   '/session/:examSessionId/status',
   authMiddleware,
+  roleMiddleware('user'),
   examController.getSessionStatus
 );
 
