@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const api = axios.create({
   // Explicit base URL for predictable integration (avoids relying on dev proxy).
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'https://hanvitect-exam-platform.onrender.com/api',
   headers: { 'Content-Type': 'application/json' },
 });
 
